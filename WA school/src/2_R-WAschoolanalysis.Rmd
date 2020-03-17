@@ -1,0 +1,103 @@
+```{r}
+#load libaries
+library(betareg)
+library(corrplot)
+library(gtools)
+library(rcompanion)
+#library(calibrate)
+
+```
+
+
+```{r}
+#read in school data file
+x <- read.csv("../data/m1_WCASSci_2018_5th_Allstudents.csv", header=T)
+x
+```
+```{r}
+#clean data (get Male values, remove unwanted columns/rows)
+x_nona <- x
+
+x_nona$Male = 100 - x_nona$Female
+
+x_nona$PercentLevel1 <- NULL
+x_nona$PercentLevel2 <- NULL
+x_nona$PercentLevel3 <- NULL
+x_nona$PercentLevel4 <- NULL
+
+x_nona <- x_nona[complete.cases(x_nona), ]
+
+```
+
+```{r}
+#look at correlation among variables (indicators and features)
+xcor <- data.frame(x_nona$PercentMetStandard,x_nona$Attendance,x_nona$DisciplineRate,x_nona$Avg..Average.Class.Size,x_nona$Teacherexp_mean,x_nona$English.Language.Learners,x_nona$Low.Income, x_nona$Students.with.Disabilities, x_nona$Male)
+corres <- cor(xcor)
+corrplot.mixed(corres,lower="number",upper="circle")
+
+#plot heatmap of correlation
+palette = colorRampPalette(c("red","white","blue")) (20)
+heatmap(x=corres,symm=TRUE,col=palette)
+
+```
+
+```{r}
+#convert percentage to proportion and do logit transformation of features before running Beta Regression
+
+x_nona$PercentMetStandard <- x_nona$PercentMetStandard/100
+
+x_nona$Attendance <- logit(x_nona$Attendance/100)
+x_nona$DisciplineRate <-logit(x_nona$DisciplineRate/100)
+
+x_nona$English.Language.Learners <- logit(x_nona$English.Language.Learners/100)
+x_nona$Low.Income <- logit(x_nona$Low.Income/100)
+x_nona$Students.with.Disabilities <- logit(x_nona$Students.with.Disabilities/100)
+
+x_nona$Male = logit(x_nona$Male/100)
+```
+
+
+```{r}
+
+colnames(x_nona)
+
+x_nona
+```
+
+```{r}
+# change -inf to -10 ( ~logit(0.0001))
+x_nona$English.Language.Learners[which(!is.finite(x_nona$English.Language.Learners))] <- -10
+x_nona$English.Language.Learners
+```
+
+
+```{r}
+############ build beta regression models ##############################
+########################################################################
+
+betaM3 <- betareg(PercentMetStandard ~ Attendance + DisciplineRate + Avg..Average.Class.Size + Teacherexp_mean + Low.Income, data=x_nona)
+
+summary(betaM3)
+
+# look at deviation from predicted performance
+plot(fitted(betaM3),x_nona$PercentMetStandard)
+
+# look at residuals distribution
+plot(fitted(betaM3),residuals(betaM3))
+
+```
+
+```{r}
+plot(fitted(betaM3),residuals(betaM3))
+textxy(fitted(betaM3),residuals(betaM3),x$SchoolOrganizationid)
+```
+
+```{r}
+##write out model3 file for visualization in Tableau
+
+res1 <- data.frame(x_nona$SchoolYear,x_nona$SchoolCode, x_nona$SchoolOrganizationid,  x_nona$PercentMetStandard, fitted(betaM3), residuals(betaM3))
+
+write.csv(res1,"5thSciModel3Results.csv", row.names = FALSE)
+
+```
+
